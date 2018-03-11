@@ -1,9 +1,11 @@
+#!/usr/bin/env python
+from __future__ import print_function
 import numpy as np
+import sys
+import os
 import pandas as pd
 import requests
 import shapefile
-import sys
-import os.path
 from shapely.geometry import Point, Polygon
 
 
@@ -20,25 +22,34 @@ def get_latlng(v):
             .format(addr=addr.replace(' ', '+'), key=api_key)
 
         # Make request to Google Maps API
+
+        print('{:25s}... '.format(v['First Name'] + ' ' + v['Last Name']),
+              end='')
+
         r = requests.get(query).json()
+
+        n_tries = 1
+        while r['status'] != 'OK' and n_tries < 5:
+            n_tries = n_tries + 1
+            print('QUERY ERROR')
+            print('   RETRY {:d}               ... '.format(n_tries), end='')
+            r = requests.get(query).json()
 
         if r['status'] == 'OK':
 
             lat = r['results'][0]['geometry']['location']['lat']
             lng = r['results'][0]['geometry']['location']['lng']
 
-            print('{:20s}... OK'.format(v['First Name'] + ' ' +
-                                        v['Last Name']))
+            print('OK')
             return (lat, lng)
 
         else:  # Google query error
-            print('{:20s}... QUERY ERROR'.format(v['First Name'] + ' ' +
-                                                 v['Last Name']))
+            print('QUERY ERROR')
             return np.nan
 
     else:  # No address data
-        print '{:20s}... NO ADDRESS'\
-            .format(v['First Name'] + ' ' + v['Last Name'])
+        print('{:25s}... NO ADDRESS'
+              .format(v['First Name'] + ' ' + v['Last Name']))
         return np.nan
 
 
@@ -64,7 +75,10 @@ def get_wards_from_zip(v, wards, zips):
     'Get list of wards intersecting with zip'
 
     if pd.notnull(v['Mailing Zip/Postal Code']):
-        zip5 = int(v['Mailing Zip/Postal Code'].split('-')[0])
+        if type(v['Mailing Zip/Postal Code']) is str:
+            zip5 = int(v['Mailing Zip/Postal Code'].split('-')[0])
+        else:
+            zip5 = int(v['Mailing Zip/Postal Code'])
 
         # Find corresponding zip in zips DataFrame
         if zip5 in zips.index:
@@ -81,21 +95,37 @@ def get_wards_from_zip(v, wards, zips):
 api_key = 'AIzaSyBkWHGsmS7qOfIXRvgxRJQxQ3NdQ1SIgQA'
 geocode_url = 'https://maps.googleapis.com/maps/api/geocode/json'
 
+# Get filename from command line argument
 if len(sys.argv) > 1:
-    vols_file = sys.argv[1]
+    volunteers_file = os.path.splitext(sys.argv[1])[0]
 else:
     print('Please specify a filename for the volunteer list in .CSV format.')
     sys.exit(0)
 
 # Import CCL volunteer data
-vols_filename = os.path.splitext(vols_file)[0]
-vols = pd.read_csv(vols_filename + '.csv')
+vols = pd.read_csv(volunteers_file + '.csv')
 
-# Load ward and ZIP boundary shapefiles
-sf_wards = shapefile.Reader('wards/wards.shp')
-wards = pd.DataFrame({'poly': [Polygon(s.points) for s in sf_wards.shapes()],
-                      'num': [int(r[0]) for r in sf_wards.records()]})
+# Get latitude/longitude for each volunteer
+print('Geolocating mailing addresses...')
+vols['lat_lng'] = vols.apply(get_latlng, axis=1)
+print('Done.\n')
 
+print('FIND VOLUNTEER WARDS     ... ', end='')
+
+# Load ward boundaries
+sf = shapefile.Reader('wards/wards.shp')
+wards = pd.DataFrame({'poly': [Polygon(s.points) for s in sf.shapes()],
+                      'num': [int(r[0]) for r in sf.records()]})
+
+# Get ward number for each volunteer
+vols['Ward'] = vols.apply(lambda x: get_ward(x, wards), axis=1)
+
+print('OK')
+
+
+print('FIND POTENTIAL WARDS     ... ', end='')
+
+# Read ZIP shapefile
 sf_zips = shapefile.Reader('zips/zips.shp')
 zips = pd.DataFrame({'poly': [Polygon(s.points) for s in sf_zips.shapes()],
                      'zip': [int(r[2]) for r in sf_zips.records()]})
@@ -104,16 +134,11 @@ zips.set_index('zip', inplace=True)
 # Remove duplicate zip code records
 zips = zips[~zips.index.duplicated(keep='first')]
 
-# Get latitude/longitude for each volunteer
-print('Geolocating mailing addresses...')
-vols['lat_lng'] = vols.apply(get_latlng, axis=1)
-print('Done.\n')
-
-# Get ward number for each volunteer
-vols['Ward'] = vols.apply(lambda x: get_ward(x, wards), axis=1)
-
-# Get potential wards overlapping the volunteer's zip code
 vols['Potential Wards'] = vols.apply(lambda x: get_wards_from_zip(x, wards, zips), axis=1)
 
+print('OK')
+
 # Write CSV file
-vols.to_csv(vols_filename + ' with Wards.csv', index=False)
+print('PRINT CSV FILE           ... ', end='')
+vols.to_csv(volunteers_file + ' with Wards.csv', index=False)
+print('OK')
