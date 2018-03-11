@@ -1,5 +1,7 @@
 # Ignore .CSV files so that personal data is not accidentally uploaded
 *.[cC][sS][vV]
+*.[xX][lL][sS]
+*.[xX][lL][sS][xX]
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
