@@ -4,6 +4,7 @@ import numpy as np
 import sys
 import os
 import pandas as pd
+from urllib import quote
 import requests
 import shapefile
 from shapely.geometry import Point, Polygon
@@ -16,13 +17,16 @@ def get_latlng(v):
         addr = '{street:s},{city:s},{state:s}'\
             .format(street=v['Mailing Street'],
                     city=v['Mailing City'],
-                    state=v['Mailing State/Province'])
+                    state=v['Mailing State/Province'])\
+            .replace(' ', '+')
+
+        # Quote special characters like '#'
+        addr = quote(addr, safe='+,')
 
         query = geocode_url + '?address={addr:s}&key={key:s}'\
             .format(addr=addr.replace(' ', '+'), key=api_key)
 
         # Make request to Google Maps API
-
         print('{:25s}... '.format(v['First Name'] + ' ' + v['Last Name']),
               end='')
 
@@ -30,9 +34,12 @@ def get_latlng(v):
 
         n_tries = 1
         while r['status'] != 'OK' and n_tries < 5:
+
             n_tries = n_tries + 1
-            print('QUERY ERROR')
-            print('   RETRY {:d}               ... '.format(n_tries), end='')
+
+            print(r['status'])
+            print('   {:s}'.format(r['error_message']))
+            print(' * RETRY {:d}               ... '.format(n_tries), end='')
             r = requests.get(query).json()
 
         if r['status'] == 'OK':
@@ -44,7 +51,9 @@ def get_latlng(v):
             return (lat, lng)
 
         else:  # Google query error
-            print('QUERY ERROR')
+            print('MAXIMUM RETRIES')
+            print('   {:s}'.format(r['status']))
+            print('   {:s}'.format(r['error_message']))
             return np.nan
 
     else:  # No address data
@@ -92,7 +101,7 @@ def get_wards_from_zip(v, wards, zips):
     return np.nan
 
 
-api_key = 'AIzaSyBkWHGsmS7qOfIXRvgxRJQxQ3NdQ1SIgQA'
+api_key = 'AIzaSyCY7rrYoIueSJ0KR9pcP4iP-aGWfyVXMyw'
 geocode_url = 'https://maps.googleapis.com/maps/api/geocode/json'
 
 # Get filename from command line argument
