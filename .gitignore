@@ -3,6 +3,9 @@
 *.[xX][lL][sS]
 *.[xX][lL][sS][xX]
 
+# Ignore private API key file
+API_KEY.txt
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

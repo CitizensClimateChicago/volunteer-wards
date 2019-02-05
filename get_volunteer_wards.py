@@ -101,8 +101,15 @@ def get_wards_from_zip(v, wards, zips):
     return np.nan
 
 
-api_key = 'AIzaSyCY7rrYoIueSJ0KR9pcP4iP-aGWfyVXMyw'
 geocode_url = 'https://maps.googleapis.com/maps/api/geocode/json'
+
+# Get API key from API_KEY.txt
+try:
+    api_key = open('API_KEYa.txt').readline().strip()
+except:
+    print('ERROR: Unable to read API_KEY.txt.'
+          'Check that the file exists and that it is readable.')
+    sys.exit(0)
 
 # Get filename from command line argument
 if len(sys.argv) > 1:
